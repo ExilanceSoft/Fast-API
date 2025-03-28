@@ -1,19 +1,20 @@
 # banjos_restaurant\app\models\career.py
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from datetime import datetime
 
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from bson import ObjectId
+class JobApplicationModel(BaseModel):
+    id: Optional[str] = None  # Make id optional
+    branch_id: str
+    job_title: str
+    applicant_name: str
+    applicant_email: EmailStr
+    applicant_phone: str
+    resume_url: str
+    cover_letter: Optional[str] = None
+    application_status: str = "pending"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-def job_application_helper(job_application) -> dict:
-    return {
-        "id": str(job_application["_id"]),
-        "branch_id": job_application["branch_id"],
-        "job_title": job_application["job_title"],
-        "applicant_name": job_application["applicant_name"],
-        "applicant_email": job_application["applicant_email"],
-        "applicant_phone": job_application["applicant_phone"],
-        "resume_url": job_application["resume_url"],
-        "cover_letter": job_application.get("cover_letter"),
-        "application_status": job_application["application_status"],
-        "created_at": job_application["created_at"],
-        "updated_at": job_application["updated_at"],
-    }
+    class Config:
+        from_attributes = True

@@ -8,12 +8,13 @@ from app.services.image_service import (
     update_image,
     delete_image,
 )
+
 router = APIRouter(prefix="/images", tags=["Images"])
 
 @router.post("/add", response_model=ImageResponse)
 async def add_image(
-    name: str, 
-    category_id: str,  # Ensure this is a string
+    name: str,
+    category_id: str,
     file: UploadFile = File(...),
     description: Optional[str] = None
 ):
@@ -21,7 +22,7 @@ async def add_image(
     image_data = {
         "name": name,
         "description": description,
-        "category_id": category_id  # Ensure this matches the field name in the database
+        "category_id": category_id
     }
     new_image = await create_image(image_data, file)
     return new_image
@@ -48,12 +49,6 @@ async def update_image_by_id(
     file: Optional[UploadFile] = File(None)
 ):
     """Update an image by its ID."""
-    print(f"Updating image {image_id} with data: name={name}, category_id={category_id}, description={description}")
-    if file:
-        print(f"Received file: {file.filename}")
-    else:
-        print("No file received")
-
     image_data = {
         "name": name,
         "category_id": category_id,

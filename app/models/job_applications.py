@@ -14,6 +14,7 @@ ALLOWED_STATUSES = (
 )
 
 class JobApplicationBase(BaseModel):
+    id: str
     full_name: str
     email: EmailStr
     phone: str
@@ -39,7 +40,6 @@ class JobApplicationCreate(JobApplicationBase):
     pass
 
 class JobApplicationResponse(JobApplicationBase):
-    id: str
     created_at: datetime
     updated_at: datetime
 

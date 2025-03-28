@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+# banjos_restaurant\app\schemas\categories.py
+from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional 
 
 class CategoryCreate(BaseModel):
     name: str
@@ -11,7 +12,7 @@ class CategoryUpdate(BaseModel):
 class CategoryResponse(BaseModel):
     id: str
     name: str
-    created_at: datetime
+    created_at: datetime = datetime.utcnow()
 
     class Config:
-        from_attributes = True  # Updated from `orm_mode`
+        from_attributes = True

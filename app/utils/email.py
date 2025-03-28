@@ -10,11 +10,8 @@ load_dotenv()
 
 env = Environment(loader=FileSystemLoader('app/templates/emails'))
 
-def render_template(template_name, **kwargs):
-    template = env.get_template(template_name)
-    return template.render(**kwargs)
-
-def send_email(recipient, subject, body):
+def send_email(recipient: str, subject: str, template_name: str, context: dict = None) -> None:
+    """Send email using a template with given context"""
     sender = os.getenv("EMAIL_SENDER")
     password = os.getenv("EMAIL_PASSWORD")
 
@@ -22,6 +19,11 @@ def send_email(recipient, subject, body):
         print("Error: Email sender or password missing")
         return
 
+    # Render the template
+    template = env.get_template(template_name)
+    body = template.render(**(context or {}))
+
+    # Create message
     msg = MIMEMultipart()
     msg["Subject"] = subject
     msg["From"] = sender

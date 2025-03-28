@@ -1,61 +1,118 @@
 # banjos_restaurant\app\services\career_service.py
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from app.schemas.career import JobApplicationCreate
+import uuid
 from datetime import datetime
-from bson import ObjectId
-from app.utils.email import send_email
-from app.models.career import job_application_helper
+from fastapi import HTTPException
+from app.core.database import dynamodb
+from app.models.career import JobApplicationModel
 
-async def apply_for_job(db: AsyncIOMotorDatabase, application_data: JobApplicationCreate):
-    application_dict = application_data.dict()
-    application_dict["created_at"] = datetime.utcnow()
-    application_dict["updated_at"] = datetime.utcnow()
-    application_dict["application_status"] = "pending"
+async def apply_for_job(application_data: dict) -> JobApplicationModel:
+    """Submit a job application."""
+    try:
+        # Generate a unique ID for the application
+        application_id = str(uuid.uuid4())
+        application_data["id"] = application_id
+        application_data["created_at"] = datetime.utcnow().isoformat()
+        application_data["updated_at"] = datetime.utcnow().isoformat()
+        application_data["application_status"] = "pending"
 
-    result = await db.job_applications.insert_one(application_dict)
-    application_dict["_id"] = str(result.inserted_id)
+        # Insert into DynamoDB
+        item = {
+            "Home": {"S": "JobApplications"},  # Partition key
+            "1": {"S": application_id},       # Sort key
+            "branch_id": {"S": application_data.get("branch_id", "")},
+            "job_title": {"S": application_data.get("job_title", "")},
+            "applicant_name": {"S": application_data.get("applicant_name", "")},
+            "applicant_email": {"S": application_data.get("applicant_email", "")},
+            "applicant_phone": {"S": application_data.get("applicant_phone", "")},
+            "resume_url": {"S": application_data.get("resume_url", "")},
+            "cover_letter": {"S": application_data.get("cover_letter", "")},
+            "application_status": {"S": application_data.get("application_status", "pending")},
+            "created_at": {"S": application_data.get("created_at", "")},
+            "updated_at": {"S": application_data.get("updated_at", "")}
+        }
 
-    subject = "Job Application Submitted Successfully"
-    body = f"""
-    Hello {application_data.applicant_name},
+        await dynamodb.put_item(item)
+        return JobApplicationModel(**application_data)
 
-    Your application for the {application_data.job_title} position has been successfully received.
-    Our HR team will review your application and get back to you soon.
+    except Exception as e:
+        print(f"Error submitting job application: {e}")
+        raise HTTPException(status_code=500, detail="Failed to submit job application")
 
-    Regards,
-    Banjo's Restaurant Team
-    """
-    send_email(application_data.applicant_email, subject, body)
+async def get_all_applications() -> list[JobApplicationModel]:
+    """Retrieve all job applications."""
+    try:
+        items = await dynamodb.scan()
+        applications = []
+        for item in items:
+            if item.get("Home", {}).get("S") == "JobApplications":  # Filter by partition key
+                application_data = {
+                    "id": item.get("1", {}).get("S", ""),  # Use the sort key as the id
+                    "branch_id": item.get("branch_id", {}).get("S", ""),
+                    "job_title": item.get("job_title", {}).get("S", ""),
+                    "applicant_name": item.get("applicant_name", {}).get("S", ""),
+                    "applicant_email": item.get("applicant_email", {}).get("S", ""),
+                    "applicant_phone": item.get("applicant_phone", {}).get("S", ""),
+                    "resume_url": item.get("resume_url", {}).get("S", ""),
+                    "cover_letter": item.get("cover_letter", {}).get("S", ""),
+                    "application_status": item.get("application_status", {}).get("S", "pending"),
+                    "created_at": item.get("created_at", {}).get("S", ""),
+                    "updated_at": item.get("updated_at", {}).get("S", "")
+                }
+                applications.append(JobApplicationModel(**application_data))
+        return applications
+    except Exception as e:
+        print(f"Error retrieving job applications: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve job applications")
 
-    return application_dict
+async def get_application_by_id(application_id: str) -> Optional[JobApplicationModel]:
+    """Retrieve a job application by ID."""
+    try:
+        key = {
+            "Home": {"S": "JobApplications"},  # Partition key
+            "1": {"S": application_id}         # Sort key
+        }
+        item = await dynamodb.get_item(key)
+        if item:
+            application_data = {
+                "id": item.get("1", {}).get("S", ""),  # Use the sort key as the id
+                "branch_id": item.get("branch_id", {}).get("S", ""),
+                "job_title": item.get("job_title", {}).get("S", ""),
+                "applicant_name": item.get("applicant_name", {}).get("S", ""),
+                "applicant_email": item.get("applicant_email", {}).get("S", ""),
+                "applicant_phone": item.get("applicant_phone", {}).get("S", ""),
+                "resume_url": item.get("resume_url", {}).get("S", ""),
+                "cover_letter": item.get("cover_letter", {}).get("S", ""),
+                "application_status": item.get("application_status", {}).get("S", "pending"),
+                "created_at": item.get("created_at", {}).get("S", ""),
+                "updated_at": item.get("updated_at", {}).get("S", "")
+            }
+            return JobApplicationModel(**application_data)
+        else:
+            raise HTTPException(status_code=404, detail="Job application not found")
+    except Exception as e:
+        print(f"Error retrieving job application: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve job application")
 
-async def get_all_applications(db: AsyncIOMotorDatabase):
-    applications = await db.job_applications.find().to_list(None)
-    return [job_application_helper(app) for app in applications]
+async def update_application_status(application_id: str, status: str) -> Optional[JobApplicationModel]:
+    """Update the status of a job application."""
+    try:
+        key = {
+            "Home": {"S": "JobApplications"},  # Partition key
+            "1": {"S": application_id}         # Sort key
+        }
 
-async def get_application_by_id(db: AsyncIOMotorDatabase, application_id: str):
-    application = await db.job_applications.find_one({"_id": ObjectId(application_id)})
-    return job_application_helper(application) if application else None
+        update_expression = "SET application_status = :status, updated_at = :updated_at"
+        expression_attribute_values = {
+            ":status": {"S": status},
+            ":updated_at": {"S": datetime.utcnow().isoformat()}
+        }
 
-async def update_application_status(db: AsyncIOMotorDatabase, application_id: str, status: str):
-    application = await db.job_applications.find_one({"_id": ObjectId(application_id)})
-    if not application:
-        return {"updated": 0}
-
-    result = await db.job_applications.update_one(
-        {"_id": ObjectId(application_id)},
-        {"$set": {"application_status": status, "updated_at": datetime.utcnow()}}
-    )
-
-    subject = "Update on Your Job Application"
-    body = f"""
-    Hello {application['applicant_name']},
-
-    Your job application status has been updated to: {status.upper()}.
-    
-    Regards,
-    Banjo's Restaurant Team
-    """
-    send_email(application["applicant_email"], subject, body)
-
-    return {"updated": result.modified_count}
+        await dynamodb.update_item(
+            key=key,
+            update_expression=update_expression,
+            expression_attribute_values=expression_attribute_values
+        )
+        return await get_application_by_id(application_id)
+    except Exception as e:
+        print(f"Error updating job application status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update job application status")

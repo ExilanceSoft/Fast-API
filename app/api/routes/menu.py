@@ -41,12 +41,13 @@ async def list_menu_items():
     return await get_all_menu_items()
 
 @router.get("/category/{category_name}", response_model=List[MenuResponse])
-async def get_menu_items_by_category(category_name: str):
+async def get_menu_items_by_category_route(category_name: str):
     """Retrieve menu items by category name."""
-    items = await get_menu_items_by_category(category_name)
+    items = await get_menu_items_by_category(category_name)  # This should call the service method
     if not items:
         raise HTTPException(status_code=404, detail="No menu items found for this category")
     return items
+
 
 @router.get("/{menu_id}", response_model=MenuResponse)
 async def get_menu_item_by_id(menu_id: str):

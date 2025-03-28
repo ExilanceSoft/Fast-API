@@ -1,12 +1,11 @@
-from pydantic import BaseModel, Field
+# banjos_restaurant\app\models\categories.py
+from pydantic import BaseModel
 from datetime import datetime
 
 class CategoryModel(BaseModel):
-    id: str = Field(..., alias="_id")  # Convert MongoDB _id to id
+    id: str
     name: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = datetime.utcnow()
 
     class Config:
-        populate_by_name = True  # Ensures alias `_id` is respected
         from_attributes = True

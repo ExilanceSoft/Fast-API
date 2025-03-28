@@ -1,45 +1,58 @@
 # banjos_restaurant\app\core\database.py
-from motor.motor_asyncio import AsyncIOMotorClient
-from app.core.config import MONGO_URI, DATABASE_NAME
+import boto3
+from app.core.config import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, DYNAMODB_TABLE
 
-class MongoDB:
+class DynamoDB:
     def __init__(self):
-        self.client = None
-        self.database = None
+        self.client = boto3.client(
+            'dynamodb',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            region_name=AWS_REGION
+        )
+        self.table_name = DYNAMODB_TABLE
 
-    async def connect(self):
-        """Initialize MongoDB connection with a connection pool."""
-        if self.client is None:  # Prevent multiple connections
-            try:
-                self.client = AsyncIOMotorClient(
-                    MONGO_URI,
-                    maxPoolSize=10,
-                    minPoolSize=1,
-                    serverSelectionTimeoutMS=5000,  # 5 seconds
-                    connectTimeoutMS=30000,  # 30 seconds
-                    socketTimeoutMS=30000  # 30 seconds
-                )
-                # Test the connection
-                await self.client.server_info()
-                self.database = self.client[DATABASE_NAME]
-                print("Connected to MongoDB successfully!")
-            except Exception as e:
-                print(f"Failed to connect to MongoDB: {e}")
-                raise RuntimeError("Failed to connect to MongoDB")
+    async def put_item(self, item):
+        """Insert an item into DynamoDB."""
+        response = self.client.put_item(
+            TableName=self.table_name,
+            Item=item
+        )
+        return response
 
-    async def close(self):
-        """Close MongoDB connection."""
-        if self.client:
-            self.client.close()
-            self.client = None
-            self.database = None
-            print("MongoDB connection closed.")
+    async def get_item(self, key):
+        """Retrieve an item from DynamoDB using its primary key."""
+        response = self.client.get_item(
+            TableName=self.table_name,
+            Key=key
+        )
+        return response.get('Item')
 
-    def get_database(self):
-        """Get the database instance after initialization."""
-        if self.database is None:
-            raise RuntimeError("Database connection is not initialized. Call 'await mongodb.connect()' at startup.")
-        return self.database
+    async def update_item(self, key, update_expression, expression_attribute_names, expression_attribute_values):
+        """Update an item in DynamoDB."""
+        response = self.client.update_item(
+            TableName=self.table_name,
+            Key=key,
+            UpdateExpression=update_expression,
+            ExpressionAttributeNames=expression_attribute_names,
+            ExpressionAttributeValues=expression_attribute_values
+        )
+        return response
 
-# Create a global MongoDB instance
-mongodb = MongoDB()
+    async def delete_item(self, key):
+        """Delete an item from DynamoDB."""
+        response = self.client.delete_item(
+            TableName=self.table_name,
+            Key=key
+        )
+        return response
+
+    async def scan(self):
+        """Scan the entire DynamoDB table."""
+        response = self.client.scan(
+            TableName=self.table_name
+        )
+        return response.get('Items', [])
+
+# Create a global DynamoDB instance
+dynamodb = DynamoDB()

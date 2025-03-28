@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field, EmailStr
+# banjos_restaurant\app\models\branches.py
+from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 class BranchModel(BaseModel):
-    id: str = Field(..., alias="_id")  # Convert MongoDB _id to id
+    id: Optional[str] = None  # Make id optional
     name: str
     latitude: float
     longitude: float
@@ -23,5 +24,4 @@ class BranchModel(BaseModel):
     image_url: Optional[str] = None
 
     class Config:
-        populate_by_name = True  # Ensures alias `_id` is respected
         from_attributes = True

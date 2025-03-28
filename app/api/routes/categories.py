@@ -1,3 +1,4 @@
+# banjos_restaurant\app\api\routes\categories.py
 from fastapi import APIRouter, HTTPException
 from app.schemas.categories import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.services.categories_service import (
@@ -11,13 +12,13 @@ from typing import List
 
 router = APIRouter(prefix="", tags=["Categories"])
 
-@router.post("/add", response_model=CategoryResponse)
+@router.post("/", response_model=CategoryResponse)
 async def add_category(category: CategoryCreate):
     """Add a new category."""
     new_category = await create_category(category.dict())
     return new_category
 
-@router.get("", response_model=List[CategoryResponse])
+@router.get("/", response_model=List[CategoryResponse])
 async def list_categories():
     """Retrieve all categories."""
     return await get_all_categories()

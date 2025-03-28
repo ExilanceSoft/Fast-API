@@ -7,6 +7,8 @@ __pycache__/
 venv/
 env/
 .venv/
+myvenv/
+.myvenv/
 
 # Distribution / packaging
 .Python

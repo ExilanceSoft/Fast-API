@@ -1,9 +1,10 @@
+# banjos_restaurant\app\api\routes\branches.py
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from app.schemas.branches import BranchCreate, BranchResponse
 from app.services.branches_service import create_branch, get_branch, update_branch, delete_branch, get_all_branches
 from typing import List, Optional
 
-router = APIRouter(prefix="/branches", tags=["Branches"])
+router = APIRouter(prefix="", tags=["Branches"])
 
 @router.post("/", response_model=BranchResponse)
 async def create_new_branch(
@@ -48,7 +49,7 @@ async def create_new_branch(
     }
     
     new_branch = await create_branch(branch_data, image)
-    return BranchResponse(**new_branch.dict())  # Convert to `BranchResponse`
+    return BranchResponse(**new_branch.dict())
 
 @router.get("/", response_model=List[BranchResponse])
 async def list_branches():
@@ -62,7 +63,6 @@ async def get_branch_by_id(branch_id: str):
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     return branch
-
 
 @router.put("/{branch_id}", response_model=BranchResponse)
 async def update_branch_by_id(
@@ -110,7 +110,6 @@ async def update_branch_by_id(
     updated_branch = await update_branch(branch_id, branch_data, image)
     if not updated_branch:
         raise HTTPException(status_code=404, detail="Branch not found")
-
     return updated_branch
 
 @router.delete("/{branch_id}")

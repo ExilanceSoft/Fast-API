@@ -1,83 +1,187 @@
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from bson import ObjectId
+import uuid
+from fastapi import HTTPException
+from app.core.database import dynamodb
+from app.models.franchise import FranchiseRequestCreate, FranchiseRequestResponse
 from datetime import datetime
-from app.models.franchise import FranchiseRequestCreate
-from fastapi.encoders import jsonable_encoder
+from typing import Optional, List
+from app.utils.email import send_email
 
-async def create_franchise_request(db: AsyncIOMotorDatabase, request_data: FranchiseRequestCreate):
-    """Create a new franchise request and send a confirmation email"""
-    franchise_dict = jsonable_encoder(request_data)
-    franchise_dict["created_at"] = datetime.utcnow()
-    franchise_dict["updated_at"] = datetime.utcnow()
-    franchise_dict["request_status"] = "pending"
-
-    result = await db.franchise_requests.insert_one(franchise_dict)
-    franchise_dict["_id"] = str(result.inserted_id)
-
-    # Send email (ensure send_email function is implemented)
-    subject = "✨ Your Franchise Request Has Been Successfully Submitted! ✨"
-    body = f"""
-    <html>
-    <body>
-        <h2>Banjo's Restaurant Franchise Application</h2>
-        <p>Dear {request_data.user_name},</p>
-        <p>We are delighted to confirm the successful submission of your franchise request!</p>
-    </body>
-    </html>
-    """
-    # send_email(request_data.user_email, subject, body)  # Uncomment and implement this function
-
-    return franchise_dict
-
-async def get_all_requests(db: AsyncIOMotorDatabase):
-    """Retrieve all franchise requests"""
-    requests = await db.franchise_requests.find().to_list(None)
-    for req in requests:
-        req["_id"] = str(req["_id"])  # Convert ObjectId to string
-    return requests
-
-async def get_request_by_id(db: AsyncIOMotorDatabase, request_id: str):
-    """Retrieve a specific franchise request by ID"""
+async def create_franchise_request(request_data: FranchiseRequestCreate) -> FranchiseRequestResponse:
+    """Create a new franchise request."""
     try:
-        request = await db.franchise_requests.find_one({"_id": ObjectId(request_id)})
-        if request:
-            request["_id"] = str(request["_id"])  # Fix ObjectId serialization
-            return request
-        return None
-    except Exception:
-        return None  # Return None if ID is invalid
+        request_id = str(uuid.uuid4())
+        created_at = datetime.utcnow()
+        updated_at = created_at
 
-async def update_request_status(db: AsyncIOMotorDatabase, request_id: str, status: str):
-    """Update franchise request status and notify the user via email"""
-    request = await db.franchise_requests.find_one({"_id": ObjectId(request_id)})
-    if not request:
-        return {"updated": 0}
+        item = {
+            "Home": {"S": "FranchiseRequests"},
+            "1": {"S": request_id},
+            "user_name": {"S": request_data.user_name},
+            "user_email": {"S": request_data.user_email},
+            "user_phone": {"S": request_data.user_phone},
+            "requested_city": {"S": request_data.requested_city},
+            "requested_state": {"S": request_data.requested_state or ""},
+            "requested_country": {"S": request_data.requested_country},
+            "investment_budget": {"N": str(request_data.investment_budget)},
+            "experience_in_food_business": {"S": request_data.experience_in_food_business or ""},
+            "additional_details": {"S": request_data.additional_details or ""},
+            "request_status": {"S": request_data.request_status},
+            "created_at": {"S": created_at.isoformat()},
+            "updated_at": {"S": updated_at.isoformat()},
+        }
 
-    result = await db.franchise_requests.update_one(
-        {"_id": ObjectId(request_id)},
-        {"$set": {"request_status": status, "updated_at": datetime.utcnow()}}
-    )
+        await dynamodb.put_item(item)
+        
+        # Send confirmation email
+        email_context = {
+            "user_name": request_data.user_name,
+            "request_id": request_id,
+            "requested_city": request_data.requested_city,
+            "requested_state": request_data.requested_state or "",
+            "requested_country": request_data.requested_country,
+            "investment_budget": request_data.investment_budget,
+            "request_status": request_data.request_status
+        }
+        
+        send_email(
+            recipient=request_data.user_email,
+            subject="Your Banjo's Restaurant Franchise Request Has Been Received",
+            template_name="franchise_request_created.html",
+            context=email_context
+        )
 
-    if result.modified_count > 0:
-        # Send email (ensure send_email function is implemented)
-        subject = "📢 Important Update: Your Franchise Request Status"
-        body = f"""
-        <html>
-        <body>
-            <h2>Franchise Request Status Update</h2>
-            <p>Dear {request['user_name']},</p>
-            <p>Your franchise request status has been updated to: {status}</p>
-        </body>
-        </html>
-        """
-        # send_email(request["user_email"], subject, body)  # Uncomment and implement this function
+        return FranchiseRequestResponse(
+            id=request_id,
+            created_at=created_at,
+            updated_at=updated_at,
+            **request_data.dict()
+        )
 
-    return {"updated": result.modified_count}
+    except Exception as e:
+        print(f"Error creating franchise request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create franchise request")
 
-async def delete_request(db: AsyncIOMotorDatabase, request_id: str):
-    """Delete a franchise request"""
+
+async def get_all_requests() -> List[FranchiseRequestResponse]:
+    """Retrieve all franchise requests."""
     try:
-        result = await db.franchise_requests.delete_one({"_id": ObjectId(request_id)})
-        return {"deleted": result.deleted_count}
-    except Exception:
-        return {"deleted": 0} 
+        items = await dynamodb.scan()
+        requests = []
+        for item in items:
+            if item.get("Home", {}).get("S") == "FranchiseRequests":  # Filter by partition key
+                request_data = {
+                    "id": item.get("1", {}).get("S", ""),
+                    "user_name": item.get("user_name", {}).get("S", ""),
+                    "user_email": item.get("user_email", {}).get("S", ""),
+                    "user_phone": item.get("user_phone", {}).get("S", ""),
+                    "requested_city": item.get("requested_city", {}).get("S", ""),
+                    "requested_state": item.get("requested_state", {}).get("S", ""),
+                    "requested_country": item.get("requested_country", {}).get("S", ""),
+                    "investment_budget": float(item.get("investment_budget", {}).get("N", "0")),
+                    "experience_in_food_business": item.get("experience_in_food_business", {}).get("S", ""),
+                    "additional_details": item.get("additional_details", {}).get("S", ""),
+                    "request_status": item.get("request_status", {}).get("S", "pending"),
+                    "created_at": datetime.fromisoformat(item.get("created_at", {}).get("S", "")),
+                    "updated_at": datetime.fromisoformat(item.get("updated_at", {}).get("S", "")),
+                }
+                requests.append(FranchiseRequestResponse(**request_data))
+        return requests
+    except Exception as e:
+        print(f"Error retrieving franchise requests: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve franchise requests")
+
+async def get_request_by_id(request_id: str) -> Optional[FranchiseRequestResponse]:
+    """Retrieve a franchise request by ID."""
+    try:
+        key = {
+            "Home": {"S": "FranchiseRequests"},  # Partition key
+            "1": {"S": request_id}              # Sort key
+        }
+        item = await dynamodb.get_item(key)
+        if item:
+            request_data = {
+                "id": item.get("1", {}).get("S", ""),
+                "user_name": item.get("user_name", {}).get("S", ""),
+                "user_email": item.get("user_email", {}).get("S", ""),
+                "user_phone": item.get("user_phone", {}).get("S", ""),
+                "requested_city": item.get("requested_city", {}).get("S", ""),
+                "requested_state": item.get("requested_state", {}).get("S", ""),
+                "requested_country": item.get("requested_country", {}).get("S", ""),
+                "investment_budget": float(item.get("investment_budget", {}).get("N", "0")),
+                "experience_in_food_business": item.get("experience_in_food_business", {}).get("S", ""),
+                "additional_details": item.get("additional_details", {}).get("S", ""),
+                "request_status": item.get("request_status", {}).get("S", "pending"),
+                "created_at": datetime.fromisoformat(item.get("created_at", {}).get("S", "")),
+                "updated_at": datetime.fromisoformat(item.get("updated_at", {}).get("S", "")),
+            }
+            return FranchiseRequestResponse(**request_data)
+        else:
+            raise HTTPException(status_code=404, detail="Franchise request not found")
+    except Exception as e:
+        print(f"Error retrieving franchise request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve franchise request")
+
+async def update_request_status(request_id: str, status: str) -> Optional[FranchiseRequestResponse]:
+    """Update a franchise request status."""
+    try:
+        # First get the current request to get user details
+        current_request = await get_request_by_id(request_id)
+        if not current_request:
+            raise HTTPException(status_code=404, detail="Franchise request not found")
+
+        key = {
+            "Home": {"S": "FranchiseRequests"},
+            "1": {"S": request_id}
+        }
+
+        update_expression = "SET #request_status = :status, #updated_at = :updated_at"
+        expression_attribute_names = {
+            "#request_status": "request_status",
+            "#updated_at": "updated_at"
+        }
+        expression_attribute_values = {
+            ":status": {"S": status},
+            ":updated_at": {"S": datetime.utcnow().isoformat()}
+        }
+
+        await dynamodb.update_item(
+            key=key,
+            update_expression=update_expression,
+            expression_attribute_names=expression_attribute_names,
+            expression_attribute_values=expression_attribute_values
+        )
+        
+        # Send status update email
+        email_context = {
+            "user_name": current_request.user_name,
+            "request_id": request_id,
+            "requested_city": current_request.requested_city,
+            "requested_state": current_request.requested_state or "",
+            "requested_country": current_request.requested_country,
+            "request_status": status
+        }
+        
+        send_email(
+            recipient=current_request.user_email,
+            subject=f"Your Banjo's Franchise Request Status Update: {status.capitalize()}",
+            template_name="franchise_status_updated.html",
+            context=email_context
+        )
+
+        return await get_request_by_id(request_id)
+    except Exception as e:
+        print(f"Error updating franchise request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update franchise request")
+    
+async def delete_request(request_id: str) -> bool:
+    """Delete a franchise request."""
+    try:
+        key = {
+            "Home": {"S": "FranchiseRequests"},  # Partition key
+            "1": {"S": request_id}              # Sort key
+        }
+        await dynamodb.delete_item(key)
+        return True
+    except Exception as e:
+        print(f"Error deleting franchise request: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete franchise request")

@@ -1,3 +1,4 @@
+# banjos_restaurant\app\schemas\career.py
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
@@ -19,7 +20,10 @@ class JobApplicationResponse(BaseModel):
     applicant_email: EmailStr
     applicant_phone: str
     resume_url: str
-    cover_letter: Optional[str]
+    cover_letter: Optional[str] = None
     application_status: str
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
