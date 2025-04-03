@@ -7,7 +7,7 @@
 2. Clone this repository:
    ```bash
    git clone <repository-url>
-   cd frontend
+   cd backend
    ```
 3. Create a `.env` file based on the example (ask a team member for the values)
 4. Run the application:
